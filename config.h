@@ -26,4 +26,6 @@
 #define SENSOR_RX           14
 #define SENSOR_TX           13
 
+#define TINY_GSM_USE_WIFI   true
+
 #endif // CONFIG_H

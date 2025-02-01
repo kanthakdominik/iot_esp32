@@ -5,13 +5,17 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <TinyGsmClient.h>
+#include <SSLClient.h>
 #include <TinyGPS++.h>
 
 
+// Clients declarations
 TinyGPSPlus gps;
-WiFiClientSecure wifiClientSecure = WiFiClientSecure();
-PubSubClient mqtt(wifiClientSecure);
 TinyGsm modem(Serial_Sim7600);
+TinyGsmClient gprsClient(modem); 
+SSLClient gprsClientSecure(&gprsClient);
+WiFiClientSecure wifiClientSecure = WiFiClientSecure();
+PubSubClient mqtt;
 
 static uint32_t lastPrintTime = 0;
 uint32_t lastReconnectAttempt = 0;
@@ -58,6 +62,54 @@ void initWiFi() {
     wifiClientSecure.setCertificate(AWS_CERT_CRT);
     wifiClientSecure.setPrivateKey(AWS_CERT_PRIVATE);
     Serial.println(" connected!");
+}
+
+void initGPRS() {
+    DBG("Initializing modem...");
+    if (!modem.init()) {
+        DBG("Failed to restart modem, delaying 10s and retrying");
+    }
+
+    String ret;
+    ret = modem.setNetworkMode(2);
+    DBG("setNetworkMode:", ret);
+    String name = modem.getModemName();
+    DBG("Modem Name:", name);
+    String modemInfo = modem.getModemInfo();
+    DBG("Modem Info:", modemInfo);
+
+    if (GSM_PIN && modem.getSimStatus() != 3) {
+        modem.simUnlock(GSM_PIN);
+    }
+
+    Serial.print("Waiting for GSM network...");
+    if (!modem.waitForNetwork()) {
+        Serial.println(" fail");
+        delay(10000);
+        return;
+    }
+    Serial.println(" success");
+
+    if (modem.isNetworkConnected()) {
+        Serial.println("GSM Network connected");
+    }
+
+    Serial.print(F("Connecting to "));
+    Serial.print(apn);
+    if (!modem.gprsConnect(apn, gprsUser, gprsPass)) {
+        Serial.println(" fail");
+        delay(10000);
+        return;
+    }
+    Serial.println(" success");
+
+    gprsClientSecure.setCACert(AWS_CERT_CA);
+    gprsClientSecure.setCertificate(AWS_CERT_CRT);
+    gprsClientSecure.setPrivateKey(AWS_CERT_PRIVATE);
+
+    if (modem.isGprsConnected()) {
+        Serial.println("GPRS connected");
+    }
 }
 
 void initSim7600() {
@@ -113,7 +165,11 @@ void initGps() {
 }
 
 void initMQTT() {
-    mqtt.setClient(wifiClientSecure);
+    #if TINY_GSM_USE_WIFI
+        mqtt.setClient(wifiClientSecure);
+    #else
+        mqtt.setClient(gprsClientSecure);
+    #endif
     mqtt.setServer(broker, brokerPort);
     mqtt.setCallback(mqttCallback);
     mqttConnect();
@@ -260,7 +316,11 @@ String getGpsDateTime() {
 
 void setup() {
     init();
-    initWiFi();
+    #if TINY_GSM_USE_WIFI
+        initWiFi();
+    #else
+        initGPRS();
+    #endif
     initSim7600();
     initGps();
     initMQTT();
