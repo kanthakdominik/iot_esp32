@@ -8,6 +8,14 @@
 const char wifiSSID[] = "";
 const char wifiPass[] = "";
 
+// GPRS credentials
+const char apn[]  = "iot";
+const char gprsUser[] = "";
+const char gprsPass[] = "";
+
+// GSM PIN
+#define GSM_PIN ""
+
 // MQTT details
 const char *broker = "";
 const int brokerPort = 8883;
