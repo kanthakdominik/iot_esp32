@@ -4,6 +4,13 @@
 #include <TinyGsmClient.h>
 #include <SSLClient.h>
 
+#if TINY_GSM_USE_WIFI
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+
+WiFiClientSecure wifiClientSecure = WiFiClientSecure();
+#endif
+
 TinyGsm modem(Serial_Sim7600);
 TinyGsmClient gprsClient(modem); 
 SSLClient gprsClientSecure(&gprsClient);
@@ -13,11 +20,9 @@ float lat = 0;
 float lon = 0;
 char Lat[20];
 char Lon[20];
-char sendbuffer[120];
 char sensorData[100];
-const char* Bat_value;
-RTC_DATA_ATTR int bootCount = 0;
-int ledStatus = LOW;
+char dateTime[30];
+char sendbuffer[120];
 uint32_t lastReconnectAttempt = 0;
 unsigned long previousMillis = 0;
 const long interval = 1000; 
@@ -28,7 +33,6 @@ boolean mqttConnect() {
     Serial.print(":");
     Serial.println(brokerPort);
 
-    // Connect to MQTT Broker
     boolean status = mqtt.connect("esp32_client");
 
     if (status == false) {
@@ -98,8 +102,37 @@ void checkNetworkAndGPRS() {
   }
 }
 
-void sendData() {
-  // Read sensor data
+
+#if TINY_GSM_USE_WIFI
+void initWiFi() {
+    Serial.println("Scanning for Wi-Fi networks...");
+    int numNetworks = WiFi.scanNetworks();
+    if (numNetworks == 0) {
+        Serial.println("No networks found.");
+    } else {
+        Serial.print(numNetworks);
+        Serial.println(" networks found:");
+        for (int i = 0; i < numNetworks; ++i) {
+            Serial.print("Network name: ");
+            Serial.println(WiFi.SSID(i));
+            Serial.println("-----------------------");
+        }
+    }
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(wifiSSID, wifiPass);
+    Serial.print("Connecting to WiFi...");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    wifiClientSecure.setCACert(AWS_CERT_CA);
+    wifiClientSecure.setCertificate(AWS_CERT_CRT);
+    wifiClientSecure.setPrivateKey(AWS_CERT_PRIVATE);
+    Serial.println(" connected!");
+}
+#endif
+
+void readSensorData() {
   if (Serial_Sensor.available() > 0) {
     int bytesRead = Serial_Sensor.readBytesUntil('\n', sensorData, sizeof(sensorData) - 1);
     if (bytesRead > 0) {
@@ -114,11 +147,11 @@ void sendData() {
     strcpy(sensorData, "NO_SENSOR_DATA"); // Default value if no sensor data is available
     Serial.println("No sensor data available");
   }
+}
 
-  // Get the date and time from the SIM7600
+void readDateTime() {
   int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
   float timezone = 0.0;
-  char dateTime[30];
   if (modem.getNetworkTime(&year, &month, &day, &hour, &minute, &second, &timezone)) {
     Serial.print("Date: ");
     Serial.print(year);
@@ -133,15 +166,15 @@ void sendData() {
     Serial.print(":");
     Serial.println(second);
 
-    // Format the date and time into a string
     snprintf(dateTime, sizeof(dateTime), "%04d-%02d-%02d %02d:%02d:%02d",
             year, month, day, hour, minute, second);
   } else {
     Serial.println("Failed to get network time.");
     strcpy(dateTime, "NO_DATETIME");
   }
+}
 
-  // Get the GPS coordinates
+void readGpsData() {
     bool gpsDataValid = true;
     while (lat <= 0 || lon <= 0)
     {
@@ -159,6 +192,12 @@ void sendData() {
         break;
       }
     }
+}
+
+void sendData() {
+  readSensorData();
+  readDateTime();
+  readGpsData();
 
   int len = snprintf(sendbuffer, sizeof(sendbuffer),
                        "%.6f,%.6f,%s,%s",
@@ -171,9 +210,7 @@ void sendData() {
 
   Serial.print("Sending: ");
   Serial.println(sendbuffer);
-  mqtt.publish(dataTopic, sendbuffer);                     
-
-  // mqtt.publish(dataTopic, "aaaaa");
+  mqtt.publish(dataTopic, sendbuffer);
 }
 
 void setup() {
@@ -182,10 +219,9 @@ void setup() {
     Serial_Sim7600.begin(UART_BAUD, SERIAL_8N1, MODEM_RX, MODEM_TX);
     delay(10);
     Serial_Sensor.begin(UART_SENSOR_BAUD, SERIAL_8N1, SENSOR_RX, SENSOR_TX);
-
  
     pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, LOW);
     pinMode(MODEM_PWRKEY, OUTPUT);
     digitalWrite(MODEM_PWRKEY, HIGH);
     delay(300);
@@ -252,7 +288,13 @@ void setup() {
         Serial.println("GPRS connected");
     }
     
-    mqtt.setClient(gprsClientSecure);
+    #if TINY_GSM_USE_WIFI
+        initWiFi();
+        mqtt.setClient(wifiClientSecure);
+    #else
+        mqtt.setClient(gprsClientSecure);
+    #endif
+
     mqtt.setServer(broker, brokerPort);
     mqtt.setCallback(mqttCallback);
     mqttConnect();
