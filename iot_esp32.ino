@@ -137,8 +137,6 @@ void readSensorData() {
     int bytesRead = Serial_Sensor.readBytesUntil('\n', sensorData, sizeof(sensorData) - 1);
     if (bytesRead > 0) {
       sensorData[bytesRead] = '\0'; // Null-terminate the string
-      Serial.print("Received sensor data: ");
-      Serial.println(sensorData);
     } else {
       strcpy(sensorData, "NO_SENSOR_DATA"); // Default value if no sensor data is available
       Serial.println("No sensor data available");
@@ -153,19 +151,6 @@ void readDateTime() {
   int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
   float timezone = 0.0;
   if (modem.getNetworkTime(&year, &month, &day, &hour, &minute, &second, &timezone)) {
-    Serial.print("Date: ");
-    Serial.print(year);
-    Serial.print("-");
-    Serial.print(month);
-    Serial.print("-");
-    Serial.print(day);
-    Serial.print(" Time: ");
-    Serial.print(hour);
-    Serial.print(":");
-    Serial.print(minute);
-    Serial.print(":");
-    Serial.println(second);
-
     snprintf(dateTime, sizeof(dateTime), "%04d-%02d-%02d %02d:%02d:%02d",
             year, month, day, hour, minute, second);
   } else {
