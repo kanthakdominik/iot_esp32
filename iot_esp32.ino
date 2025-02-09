@@ -25,7 +25,6 @@ char dateTime[30];
 char sendbuffer[120];
 uint32_t lastReconnectAttempt = 0;
 unsigned long previousMillis = 0;
-const long interval = 1000; 
 
 boolean mqttConnect() {
     Serial.print("Connecting to ");
@@ -49,22 +48,35 @@ boolean mqttConnect() {
 void mqttCallback(char *topic, byte *payload, unsigned int len) {
     Serial.print("Message arrived [");
     Serial.print(topic);
-    Serial.print("]: ");
-    Serial.write(payload, len);
-    Serial.println();
+    Serial.println("]: ");
 
-    // Only proceed if incoming message's topic matches configTopic
     if (String(topic) == configTopic) {
-        Serial.println("Set config");
+      String content;
+      for (unsigned int i = 0; i < len; i++) {
+          content += (char)payload[i];
+      }
+      Serial.print("Content: ");
+      Serial.print(content);
+
+      if(content == "battery"){
+        float batteryMv = readBattery();
+        float batteryPercentage = getBatteryPercentage(batteryMv);
+
+        Serial.printf("Battery: %.0fmV (%d%%)\n", batteryMv, (int)batteryPercentage);
+
+        char batteryStr[20];
+        snprintf(batteryStr, sizeof(batteryStr), "%.0fmV (%d%%)", batteryMv, (int)batteryPercentage);
+        mqtt.publish(batteryTopic, batteryStr);
+      }
+
     }
 }
 
 void mqttConnectAttempt() {
   static unsigned long lastReconnectAttempt = 0;
-  const long reconnectInterval = 10000;
 
   unsigned long currentMillis = millis();
-  if (currentMillis - lastReconnectAttempt > reconnectInterval) {
+  if (currentMillis - lastReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
     lastReconnectAttempt = currentMillis;
     if (mqttConnect()) {
       lastReconnectAttempt = 0;
@@ -74,10 +86,9 @@ void mqttConnectAttempt() {
 
 void checkNetworkAndGPRS() {
   static unsigned long lastCheckMillis = 0;
-  const long checkInterval = 10000;
-
+  
   unsigned long currentMillis = millis();
-  if (currentMillis - lastCheckMillis >= checkInterval) {
+  if (currentMillis - lastCheckMillis >= NETWORK_CHECK_INTERVAL) {
     lastCheckMillis = currentMillis;
 
     if (!modem.isNetworkConnected()) {
@@ -159,9 +170,6 @@ void readDateTime() {
 }
 
 void readGpsData() {
-    bool gpsDataValid = true;
-    while (lat <= 0 || lon <= 0)
-    {
       modem.sendAT("+SGPIO=0,4,1,1");
       if (modem.waitResponse(10000L) != 1) {
         Serial.println(" SGPIO=0,4,1,1 false ");
@@ -172,10 +180,7 @@ void readGpsData() {
         Serial.println("Latitude: " + String(lat, 8) + "\tLongitude: " + String(lon, 8));
       } else {
         Serial.println("Failed to get GPS data.");
-        gpsDataValid = false;
-        break;
       }
-    }
 }
 
 void sendData() {
@@ -184,7 +189,7 @@ void sendData() {
   readGpsData();
 
   int len = snprintf(sendbuffer, sizeof(sendbuffer),
-                       "%.6f,%.6f,%s,%s",
+                       "%.6f, %.6f, %s, %s",
                       lat, lon, dateTime, sensorData);
 
   if (len < 0 || len >= sizeof(sendbuffer)) {
@@ -195,6 +200,29 @@ void sendData() {
   Serial.print("Sending: ");
   Serial.println(sendbuffer);
   mqtt.publish(dataTopic, sendbuffer);
+}
+
+float getBatteryPercentage(float mv) {
+    if (mv >= 4200) return 100;
+    if (mv >= 4100) return 90;
+    if (mv >= 4000) return 80;
+    if (mv >= 3900) return 70;
+    if (mv >= 3800) return 60;
+    if (mv >= 3750) return 50;
+    if (mv >= 3700) return 40;
+    if (mv >= 3600) return 30;
+    if (mv >= 3500) return 20;
+    if (mv >= 3400) return 10;
+    if (mv >= 3300) return 5;
+    return 0;
+}
+
+float readBattery()
+{
+    int vref = 1100;
+    uint16_t volt = analogRead(BAT_ADC);
+    float battery_voltage = ((float)volt / 4095.0) * 2.0 * 3.3 * (vref);
+    return battery_voltage;
 }
 
 void setup() {
@@ -299,7 +327,7 @@ void loop() {
 
   mqtt.loop();
 
-  if (currentMillis - previousMillis >= interval) {
+  if (currentMillis - previousMillis >= INTERVAL) {
     previousMillis = currentMillis;
     sendData();
   }
