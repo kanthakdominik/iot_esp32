@@ -102,7 +102,6 @@ void checkNetworkAndGPRS() {
   }
 }
 
-
 #if TINY_GSM_USE_WIFI
 void initWiFi() {
     Serial.println("Scanning for Wi-Fi networks...");
@@ -136,13 +135,13 @@ void readSensorData() {
   if (Serial_Sensor.available() > 0) {
     int bytesRead = Serial_Sensor.readBytesUntil('\n', sensorData, sizeof(sensorData) - 1);
     if (bytesRead > 0) {
-      sensorData[bytesRead] = '\0'; // Null-terminate the string
+      sensorData[bytesRead] = '\0';
     } else {
-      strcpy(sensorData, "NO_SENSOR_DATA"); // Default value if no sensor data is available
+      strcpy(sensorData, "NO_SENSOR_DATA");
       Serial.println("No sensor data available");
     }
   } else {
-    strcpy(sensorData, "NO_SENSOR_DATA"); // Default value if no sensor data is available
+    strcpy(sensorData, "NO_SENSOR_DATA");
     Serial.println("No sensor data available");
   }
 }
