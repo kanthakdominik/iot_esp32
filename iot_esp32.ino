@@ -3,6 +3,7 @@
 #include <PubSubClient.h>
 #include <TinyGsmClient.h>
 #include <SSLClient.h>
+#include <Preferences.h>
 
 #if TINY_GSM_USE_WIFI
 #include <WiFi.h>
@@ -10,6 +11,9 @@
 
 WiFiClientSecure wifiClientSecure = WiFiClientSecure();
 #endif
+
+Preferences preferences;
+uint32_t currentRouteId = 0;
 
 TinyGsm modem(Serial_Sim7600);
 TinyGsmClient gprsClient(modem); 
@@ -22,9 +26,20 @@ char Lat[20];
 char Lon[20];
 char sensorData[100];
 char dateTime[30];
-char sendbuffer[120];
+char sendbuffer[150];
 uint32_t lastReconnectAttempt = 0;
 unsigned long previousMillis = 0;
+
+void initRouteId() {
+  preferences.begin("routes", false);  // false = R/W mode
+  currentRouteId = preferences.getUInt("lastRoute", 0);
+  currentRouteId++;
+  preferences.putUInt("lastRoute", currentRouteId);
+  preferences.end();
+  
+  Serial.print("Starting new route with ID: ");
+  Serial.println(currentRouteId);
+}
 
 boolean mqttConnect() {
     Serial.print("Connecting to ");
@@ -189,8 +204,8 @@ void sendData() {
   readGpsData();
 
   int len = snprintf(sendbuffer, sizeof(sendbuffer),
-                       "%.6f, %.6f, %s, %s",
-                      lat, lon, dateTime, sensorData);
+                       "%u, %.6f, %.6f, %s, %s",
+                       currentRouteId, lat, lon, dateTime, sensorData);
 
   if (len < 0 || len >= sizeof(sendbuffer)) {
     Serial.println("Error: snprintf failed or buffer overflow!");
@@ -232,6 +247,8 @@ void setup() {
     delay(10);
     Serial_Sensor.begin(UART_SENSOR_BAUD, SERIAL_8N1, SENSOR_RX, SENSOR_TX);
  
+    initRouteId();
+
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
     pinMode(MODEM_PWRKEY, OUTPUT);
