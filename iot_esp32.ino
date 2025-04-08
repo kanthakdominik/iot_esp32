@@ -29,6 +29,8 @@ char dateTime[30];
 char sendbuffer[150];
 uint32_t lastReconnectAttempt = 0;
 unsigned long previousMillis = 0;
+unsigned long lastLedToggle = 0;
+bool validGpsAcquired = false;
 
 void initRouteId() {
   preferences.begin("routes", false);  // false = R/W mode
@@ -193,8 +195,17 @@ void readGpsData() {
       Serial.println("Requesting current GPS/GNSS/GLONASS location");
       if (modem.getGPS(&lat, &lon)) {
         Serial.println("Latitude: " + String(lat, 8) + "\tLongitude: " + String(lon, 8));
+
+        if (lat != 0.0 && lon != 0.0) {
+          validGpsAcquired = true;
+          digitalWrite(LED_PIN, HIGH);
+        } else {
+          validGpsAcquired = false;
+        }
+
       } else {
         Serial.println("Failed to get GPS data.");
+        validGpsAcquired = false;
       }
 }
 
@@ -247,6 +258,10 @@ void setup() {
     delay(10);
     Serial_Sensor.begin(UART_SENSOR_BAUD, SERIAL_8N1, SENSOR_RX, SENSOR_TX);
  
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+    validGpsAcquired = false;
+
     initRouteId();
 
     pinMode(LED_PIN, OUTPUT);
@@ -331,6 +346,13 @@ void setup() {
 
 void loop() {
   unsigned long currentMillis = millis();
+
+  if (!validGpsAcquired) {
+    if (currentMillis - lastLedToggle >= 500) {
+      lastLedToggle = currentMillis;
+      digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+    }
+  }
 
   if (!modem.isNetworkConnected() || !modem.isGprsConnected()) {
     checkNetworkAndGPRS();
