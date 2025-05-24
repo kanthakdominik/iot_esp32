@@ -60,6 +60,8 @@ void setup() {
     Serial.begin(UART_BAUD);
     delay(10);
     Serial_Sensor.begin(UART_SENSOR_BAUD, SERIAL_8N1, SENSOR_RX, SENSOR_TX);
+
+    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
  
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
@@ -72,6 +74,7 @@ void setup() {
         Serial.println("SD card initialization failed!");
     } else {
         Serial.println("SD card initialized.");
+        Serial.print("Filename: ");
         Serial.println(filename);
     }
 }

@@ -17,7 +17,7 @@
 
 #define LED_PIN             12
 
-#define SENSOR_RX           16
-#define SENSOR_TX           17
+#define SENSOR_RX           39
+#define SENSOR_TX           0
 
 #endif // CONFIG_H

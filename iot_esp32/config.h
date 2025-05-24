@@ -5,6 +5,15 @@
 #define MQTT_RECONNECT_INTERVAL 10000
 #define NETWORK_CHECK_INTERVAL  10000
 
+#define ESP_DRD_USE_EEPROM    false
+#define ESP_DRD_USE_SPIFFS    true
+#define DRD_TIMEOUT           5
+#define DRD_ADDRESS           0
+
+#define SD_MISO             2
+#define SD_MOSI             15
+#define SD_SCLK             14
+#define SD_CS               13
 
 #define TINY_GSM_MODEM_SIM7600
 #define TINY_GSM_RX_BUFFER  1024
