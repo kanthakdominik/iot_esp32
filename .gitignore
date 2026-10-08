@@ -1,0 +1,7 @@
+# device secrets (APN, Wi-Fi, certificates, private key) - only secrets.example.h is committed
+secrets*.h
+!secrets.example.h
+
+# IDE / build
+build/
+*.bin
