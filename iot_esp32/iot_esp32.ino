@@ -3,8 +3,8 @@
 //
 // Protocol: MQTT v1, see iot_spring/docs/PROTOCOL.md
 //   radmon/v1/<deviceId>/telemetry  one JSON sample per MightyOhm line (1 Hz)
-//   radmon/v1/<deviceId>/status     retained {"online":true,...}; Last Will {"online":false}
-//   radmon/v1/<deviceId>/event      battery, route-started, error
+//   radmon/v1/<deviceId>/status     retained {"online":true,...,"csq":N}; Last Will {"online":false}
+//   radmon/v1/<deviceId>/event      battery (also every HEALTH_INTERVAL), route-started, error
 //   radmon/v1/<deviceId>/cmd        {"cmd":"new-route"} / {"cmd":"battery"}
 //
 // Routes:
@@ -51,6 +51,7 @@ const char *LWT_PAYLOAD = "{\"online\":false}";
 bool networkOk = false;
 unsigned long lastNetworkCheck = 0;
 unsigned long lastMqttAttempt = 0;
+unsigned long lastHealthPublish = 0;
 
 // ---------------------------------------------------------------------------- route state
 // Survives software resets, panics and watchdog resets (not power-on).
@@ -93,6 +94,7 @@ bool sdReady = false;
 
 // ---------------------------------------------------------------------------- forward declarations
 void publishStatus();
+void publishBattery();
 bool readSensor(SensorReading &out);
 void takeSample(const SensorReading &s);
 GnssReading readGnss();
@@ -172,6 +174,26 @@ int batteryPercent(float mv) {
   if (mv >= 3400) return 10;
   if (mv >= 3300) return 5;
   return 0;
+}
+
+// GSM signal quality (AT+CSQ) 0..31, or -1 when unknown (modem answers 99) or when sending over Wi-Fi.
+int readSignalQuality() {
+#if USE_WIFI
+  return -1;
+#else
+  int q = modem.getSignalQuality();
+  return (q >= 0 && q <= 31) ? q : -1;
+#endif
+}
+
+// ',"csq":N' or "" when the signal quality is unknown
+void formatCsqPart(char *out, size_t len) {
+  int csq = readSignalQuality();
+  if (csq < 0) {
+    out[0] = '\0';
+  } else {
+    snprintf(out, len, ",\"csq\":%d", csq);
+  }
 }
 
 // ============================================================================ route state
@@ -355,19 +377,33 @@ void logToSd(const char *json) {
 
 void publishStatus() {
   float mv = readBatteryMv();
-  char buf[160];
+  char csqPart[16];
+  formatCsqPart(csqPart, sizeof(csqPart));
+  char buf[192];
   snprintf(buf, sizeof(buf),
-           "{\"online\":true,\"fw\":\"%s\",\"r\":%u,\"reset\":\"%s\",\"bat_mv\":%d,\"bat_pct\":%d}",
-           FW_VERSION, (unsigned)routeNo, resetReasonName, (int)mv, batteryPercent(mv));
+           "{\"online\":true,\"fw\":\"%s\",\"r\":%u,\"reset\":\"%s\",\"bat_mv\":%d,\"bat_pct\":%d%s}",
+           FW_VERSION, (unsigned)routeNo, resetReasonName, (int)mv, batteryPercent(mv), csqPart);
   mqtt.publish(topicStatus, buf, true);   // retained
 }
 
+// Battery (+ GSM signal) event: answer to the "battery" command and periodic health report.
 void publishBattery() {
   float mv = readBatteryMv();
-  char buf[64];
-  snprintf(buf, sizeof(buf), "{\"type\":\"battery\",\"mv\":%d,\"pct\":%d}", (int)mv, batteryPercent(mv));
+  char csqPart[16];
+  formatCsqPart(csqPart, sizeof(csqPart));
+  char buf[96];
+  snprintf(buf, sizeof(buf), "{\"type\":\"battery\",\"mv\":%d,\"pct\":%d%s}",
+           (int)mv, batteryPercent(mv), csqPart);
   mqtt.publish(topicEvent, buf);
+  lastHealthPublish = millis();
   Serial.printf("Battery: %s\n", buf);
+}
+
+// Every HEALTH_INTERVAL while connected: battery level and signal quality for the device history.
+void maintainHealthReport() {
+  if (mqtt.connected() && millis() - lastHealthPublish >= HEALTH_INTERVAL) {
+    publishBattery();
+  }
 }
 
 void mqttCallback(char *topic, byte *payload, unsigned int len) {
@@ -400,6 +436,7 @@ bool mqttConnect() {
   Serial.println("connected");
   mqtt.subscribe(topicCmd, 1);
   publishStatus();
+  lastHealthPublish = millis();   // the status already carries battery and signal
   return true;
 }
 
@@ -574,5 +611,6 @@ void loop() {
   }
   checkSensorTimeout();
   maintainConnectivity();
+  maintainHealthReport();
   updateLed();
 }

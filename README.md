@@ -10,8 +10,11 @@ Protokół komunikacji: `iot_spring/docs/PROTOCOL.md` (MQTT v1).
 - wysyła ją przez LTE do brokera MQTT (TLS + certyfikat urządzenia) na `radmon/v1/<deviceId>/telemetry`;
 - **zawsze** dopisuje ją też na kartę SD (`/r<trasa>.jsonl`), jeśli karta jest włożona –
   dane nie giną bez zasięgu;
-- po połączeniu publikuje status (`online`, wersja, trasa, przyczyna resetu, bateria);
+- po połączeniu publikuje status (`online`, wersja, trasa, przyczyna resetu, bateria, zasięg GSM `csq`);
   przy zerwaniu połączenia broker sam publikuje `{"online":false}` (Last Will);
+- co `HEALTH_INTERVAL` (domyślnie 10 min, `config.h`), gdy jest połączenie z brokerem, wysyła zdarzenie
+  `{"type":"battery","mv":...,"pct":...,"csq":...}` – serwer rysuje z tego wykres baterii i zasięgu
+  i może wysłać alert o niskiej baterii;
 - przyjmuje komendy z serwera: `new-route` (nowa trasa bez restartu), `battery`.
 
 ## Trasy
@@ -49,6 +52,16 @@ Przyczyna resetu jest wypisywana na Serial przy starcie (`Reset reason: ...`) i 
 4. Wgraj, otwórz Serial Monitor (115200).
 
 `secrets.h` jest w `.gitignore` – nigdy go nie commituj (zawiera klucz prywatny urządzenia).
+
+## Zmiany w wersji 2.1
+
+- `FW_VERSION` = `2.1.0`;
+- status i zdarzenie `battery` zawierają `csq` – jakość sygnału GSM z `AT+CSQ` (0–31); gdy modem zwraca 99
+  (nieznana) albo dane idą przez Wi-Fi (`USE_WIFI 1`), pole jest pomijane;
+- nowe ustawienie `HEALTH_INTERVAL` w `config.h` – okresowy raport baterii i zasięgu (domyślnie 600000 ms).
+
+Pliki `r<N>.jsonl` z karty SD można wgrać w aplikacji (strona urządzenia → **Import z karty SD**) – próbki,
+które dotarły już przez MQTT, są pomijane, a linie bez czasu (`ts`) odrzucane.
 
 ## Zmiany względem wersji 1.x (praca magisterska)
 

@@ -6,7 +6,7 @@
 // Protocol: iot_spring/docs/PROTOCOL.md (MQTT v1)
 // ============================================================================
 
-#define FW_VERSION              "2.0.0"
+#define FW_VERSION              "2.1.0"
 
 // ---- timing ----------------------------------------------------------------
 #define NETWORK_CHECK_INTERVAL  10000UL   // ms between GSM/GPRS checks when not connected
@@ -15,6 +15,7 @@
 #define CLOCK_SYNC_INTERVAL     60000UL   // ms between system clock syncs from GNSS
 #define SENSOR_TIMEOUT          5000UL    // ms without a line from MightyOhm -> error event
 #define SEQ_CHECKPOINT_EVERY    300       // samples between seq checkpoints in NVS (flash wear)
+#define HEALTH_INTERVAL         600000UL  // ms between periodic battery / GSM signal events (when connected)
 
 // ---- features ----------------------------------------------------------------
 #define SD_LOGGING              1         // 1 = every sample is also appended to /r<route>.jsonl on the SD card
